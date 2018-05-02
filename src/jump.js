@@ -35,53 +35,6 @@ const jumper = () => {
     return element.getBoundingClientRect().top + start
   }
 
-  // rAF loop helper
-
-  function loop (timeCurrent) {
-    // store time scroll started, if not started already
-    if (!timeStart) {
-      timeStart = timeCurrent
-    }
-
-    // determine time spent scrolling so far
-    timeElapsed = timeCurrent - timeStart
-
-    // calculate next scroll position
-    next = easing(timeElapsed, start, distance, duration)
-
-    // scroll to it
-    window.scrollTo(0, next)
-
-    // check progress
-    timeElapsed < duration
-      ? window.requestAnimationFrame(loop)       // continue scroll loop
-      : done()                                   // scrolling is done
-  }
-
-  // scroll finished helper
-
-  function done () {
-    // account for rAF time rounding inaccuracies
-    window.scrollTo(0, start + distance)
-
-    // if scrolling to an element, and accessibility is enabled
-    if (element && a11y) {
-      // add tabindex indicating programmatic focus
-      element.setAttribute('tabindex', '-1')
-
-      // focus the element
-      element.focus()
-    }
-
-    // if it exists, fire the callback
-    if (typeof callback === 'function') {
-      callback()
-    }
-
-    // reset time for next jump
-    timeStart = false
-  }
-
   // API
 
   function jump (target, options = {}) {
@@ -91,6 +44,7 @@ const jumper = () => {
     callback = options.callback                       // "undefined" is a suitable default, and won't be called
     easing = options.easing || easeInOutQuad
     a11y = options.a11y || false
+    let currentAnimation
 
     // cache starting position
     start = location()
@@ -135,8 +89,69 @@ const jumper = () => {
         break
     }
 
+    // rAF loop helper
+
+    const loop = (timeCurrent) => {
+      // store time scroll started, if not started already
+      if (!timeStart) {
+        timeStart = timeCurrent
+      }
+
+      // determine time spent scrolling so far
+      timeElapsed = timeCurrent - timeStart
+
+      // calculate next scroll position
+      next = easing(timeElapsed, start, distance, duration)
+
+      // scroll to it
+      window.scrollTo(0, next)
+
+      // check progress
+      if (timeElapsed < duration) {
+        currentAnimation = window.requestAnimationFrame(loop)   // continue scroll loop
+      } else {
+        done()                                                  // scrolling is done
+      }
+    }
+
+    // scroll finished helper
+
+    const done = () => {
+      // account for rAF time rounding inaccuracies
+      window.scrollTo(0, start + distance)
+
+      window.requestAnimationFrame(() => {
+        // if scrolling to an element, and accessibility is enabled
+        if (element && a11y) {
+          // add tabindex indicating programmatic focus
+          element.setAttribute('tabindex', '-1')
+
+          // focus the element
+          element.focus()
+        }
+
+        // if it exists, fire the callback
+        if (typeof callback === 'function') {
+          callback()
+        }
+
+        // reset time for next jump
+        timeStart = false
+      })
+    }
+
+    const cancel = () => {
+      timeStart = false
+
+      if (currentAnimation) {
+        window.cancelAnimationFrame(currentAnimation)
+      }
+    }
+
     // start the loop
-    window.requestAnimationFrame(loop)
+    currentAnimation = window.requestAnimationFrame(loop)
+
+    return { cancel }
   }
 
   // expose only the jump method
